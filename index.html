@@ -45,7 +45,6 @@
         <p>Upload your SDLC phase documents to receive a professional security analysis report for each phase.</p>
       </div>
 
-      <!-- SDLC Phase Cards -->
       <section class="sdlc-container" aria-label="SDLC phases">
 
         <div class="sdlc-card" data-phase="Requirements">
@@ -122,7 +121,6 @@
 
       </section>
 
-      <!-- Final Report Section -->
       <div class="final-report-section">
         <button class="final-report-btn" id="finalReportBtn" onclick="generateFinalReport()">
           Generate Final Comprehensive Security Report
@@ -133,7 +131,6 @@
         </button>
       </div>
 
-      <!-- Chat Box -->
       <div class="chat-box">
         <div class="chat-placeholder" id="chatPlaceholder">
           Start a new conversation and ask Aman.ai about your software security, vulnerabilities, or best practices.
@@ -148,10 +145,9 @@
   </div>
 
   <script>
-    // Store analysis results keyed by phase
+    const API_BASE_URL = "https://aman-ai-rl6v.onrender.com";
     const phaseResults = {};
 
-    // Show selected file names under each card
     document.querySelectorAll(".upload-input").forEach(input => {
       input.addEventListener("change", () => {
         const fileList = input.nextElementSibling;
@@ -188,10 +184,10 @@
       card.classList.remove("expanded");
 
       try {
-        const response = await fetch("https://aman-ai-rl6v.onrender.com/api/analyze", {
-  method: "POST",
-  body: formData
-});
+        const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+          method: "POST",
+          body: formData
+        });
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -227,7 +223,7 @@
       button.textContent = "Downloading...";
 
       try {
-        const response = await fetch("http://localhost:8000/api/download-report", {
+        const response = await fetch(`${API_BASE_URL}/api/download-report`, {
           method: "POST",
           body: formData
         });
@@ -267,7 +263,7 @@
       downloadBtn.style.display = "none";
 
       try {
-        const response = await fetch("http://localhost:8000/api/final-report", {
+        const response = await fetch(`${API_BASE_URL}/api/final-report`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(phases)
@@ -303,10 +299,9 @@
       formData.append("content", content);
 
       try {
-        const response = await fetch("https://aman-ai-rl6v.onrender.com/api/analyze", {
-  method: "POST",
-  body: formData
-});
+        const response = await fetch(`${API_BASE_URL}/api/download-report`, {
+          method: "POST",
+          body: formData
         });
 
         if (!response.ok) throw new Error("Download failed.");
@@ -326,7 +321,6 @@
       }
     }
 
-    // Chat
     function collectPhaseResponses() {
       return Object.entries(phaseResults)
         .filter(([phase]) => phase !== "Final")
@@ -363,7 +357,7 @@
       sendBtn.disabled = true;
 
       try {
-        const response = await fetch("http://localhost:8000/api/chat", {
+        const response = await fetch(`${API_BASE_URL}/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ question, phases: phaseResponses })
@@ -385,7 +379,10 @@
 
     document.getElementById("chatSendBtn").addEventListener("click", sendChat);
     document.getElementById("chatInput").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); sendChat(); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        sendChat();
+      }
     });
   </script>
 
