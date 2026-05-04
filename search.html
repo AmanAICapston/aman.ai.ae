@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Aman.ai – Search</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+    <div class="sidebar">
+      <div class="sidebar-title">Aman.ai</div>
+
+      <button class="sidebar-btn" onclick="window.location.href='newchat.html'">
+        <span class="icon">+</span>
+        New Chat
+      </button>
+
+      <div>
+        <div class="sidebar-section-title">General</div>
+        <button class="sidebar-btn" onclick="window.location.href='settings.html'">
+          <span class="icon">⚙</span>
+          Settings
+        </button>
+        <button class="sidebar-btn" onclick="window.location.href='search.html'">
+          <span class="icon">🔍</span>
+          Search
+        </button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="page-title">Search</div>
+      <div class="page-desc">
+        Search through your previous conversations or security topics. 
+      </div>
+
+      <div class="form-group">
+        <label>Search query</label>
+        <input type="text" id="searchInput" placeholder="Search in Aman.ai...">
+      </div>
+
+      <button class="primary-btn" onclick="runSearch()">Search</button>
+
+      <div id="results" style="margin-top: 20px; font-size: 14px; color: #e8e9f4;"></div>
+
+      <button class="link-btn" onclick="window.location.href='aman.html'">
+        ← Back to Home
+      </button>
+    </div>
+  </div>
+
+  <script>
+    function runSearch() {
+      const q = document.getElementById('searchInput').value;
+      const results = document.getElementById('results');
+      if (!q.trim()) {
+        results.textContent = "Please enter a search query.";
+      } else {
+        results.textContent = "Search results for: \"" + q + "\" .";
+      }
+    }
+  </script>
+</body>
+</html>

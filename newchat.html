@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Aman.ai – New Chat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+    <div class="sidebar">
+      <div class="sidebar-title">Aman.ai</div>
+
+      <button class="sidebar-btn" onclick="window.location.href='newchat.html'">
+        <span class="icon">+</span>
+        New Chat
+      </button>
+
+      <div>
+        <div class="sidebar-section-title">General</div>
+        <button class="sidebar-btn" onclick="window.location.href='settings.html'">
+          <span class="icon">⚙</span>
+          Settings
+        </button>
+        <button class="sidebar-btn" onclick="window.location.href='search.html'">
+          <span class="icon">🔍</span>
+          Search
+        </button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="page-title">New Conversation</div>
+      <div class="page-desc">
+        Start a fresh discussion with Aman.ai about your software security, vulnerabilities, or best practices.
+      </div>
+
+      <div class="chat-box">
+        <div class="chat-placeholder">
+          This is a new chat. Type your first question to Aman.ai.
+        </div>
+
+        <div class="chat-input-wrapper">
+          <button class="chat-icon-btn" onclick="openAttachmentMenu()">📎</button>
+          <button class="chat-icon-btn">🎤</button>
+          <input class="chat-input" type="text" placeholder="Message Aman.ai..." />
+          <button class="chat-icon-btn send">➤</button>
+        </div>
+      </div>
+
+      <button class="link-btn" onclick="window.location.href='aman.html'">
+        ← Back to Home
+      </button>
+    </div>
+  </div>
+
+  <script>
+    function openAttachmentMenu() {
+      alert("Attachment options ");
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Aman.ai – Login</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      background: #050814;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .login-box {
+      width: 350px;
+      padding: 30px;
+      background: #0b1020;
+      border-radius: 16px;
+      border: 1px solid #1b2238;
+      box-shadow: 0 0 20px rgba(0,0,0,0.4);
+      text-align: center;
+    }
+    .login-box h2 {
+      margin-bottom: 20px;
+      color: #3b82f6;
+    }
+    .login-box input {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 10px;
+      border: 1px solid #252b45;
+      background: #050814;
+      color: white;
+      font-size: 14px;
+    }
+    .login-box button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border-radius: 10px;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-box">
+    <h2>Aman.ai Login</h2>
+
+    <input type="email" id="email" placeholder="Enter your email">
+    <input type="password" id="password" placeholder="Enter your password">
+
+    <button onclick="login()">Login</button>
+  </div>
+
+  <script>
+    function login() {
+      const email = document.getElementById("email").value;
+      const pass = document.getElementById("password").value;
+
+    
+      if (email === "admin@aman.ai" && pass === "1234") {
+        window.location.href = "aman.html";
+      } else {
+        alert("Incorrect email or password (Demo only).");
+      }
+    }
+  </script>
+
+</body>
+</html>
