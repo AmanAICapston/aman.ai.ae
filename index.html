@@ -188,7 +188,7 @@
       card.classList.remove("expanded");
 
       try {
-        const response = await fetch("http://localhost:8000/api/analyze", {
+        const response = await fetch("https://aman-ai.onrender.com/api/analyze", {
           method: "POST",
           body: formData
         });
