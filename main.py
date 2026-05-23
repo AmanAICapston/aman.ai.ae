@@ -8,8 +8,13 @@ from datetime import date
 from dotenv import load_dotenv
 load_dotenv()
 
-import mysql.connector
-from mysql.connector import pooling
+# MySQL is optional. On Render, localhost MySQL usually fails unless a cloud DB is configured.
+try:
+	import mysql.connector
+	from mysql.connector import pooling
+except Exception:
+	mysql = None
+	pooling = None
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,19 +42,45 @@ app.add_middleware(
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
-# ── MySQL connection pool ─────────────────────────────────────────────────────
-_db_pool = pooling.MySQLConnectionPool(
-	pool_name="amanpool",
-	pool_size=5,
-	host=os.getenv("DB_HOST", "localhost"),
-	port=int(os.getenv("DB_PORT", "3306")),
-	user=os.getenv("DB_USER", "root"),
-	password=os.getenv("DB_PASSWORD", ""),
-	database=os.getenv("DB_NAME", "amanai"),
-)
+# ── Optional MySQL / In-memory fallback ────────────────────────────────────────
+# Public deployment fix:
+# Render cannot connect to localhost:3306 unless you deploy a real cloud database.
+# Therefore the app runs in in-memory mode by default so the public website works.
+# To enable MySQL later, set USE_DATABASE=true and add DB_HOST, DB_USER, DB_PASSWORD, DB_NAME.
+USE_DATABASE = os.getenv("USE_DATABASE", "false").lower() == "true"
+DB_ENABLED = False
+_db_pool = None
+
+if USE_DATABASE and mysql is not None and pooling is not None:
+	try:
+		_db_pool = pooling.MySQLConnectionPool(
+			pool_name="amanpool",
+			pool_size=5,
+			host=os.getenv("DB_HOST"),
+			port=int(os.getenv("DB_PORT", "3306")),
+			user=os.getenv("DB_USER"),
+			password=os.getenv("DB_PASSWORD", ""),
+			database=os.getenv("DB_NAME"),
+		)
+		DB_ENABLED = True
+		print("MySQL database mode enabled.")
+	except Exception as e:
+		DB_ENABLED = False
+		print(f"MySQL disabled. Running in-memory mode. Reason: {e}")
+else:
+	print("Running in-memory mode. Set USE_DATABASE=true with valid DB variables to enable MySQL.")
+
+MEM_USERS = {}
+MEM_TOKENS = {}
+MEM_SESSIONS = {}
+MEM_MESSAGES = {}
+NEXT_USER_ID = 1
+NEXT_SESSION_ID = 1
 
 
 def _db():
+	if not DB_ENABLED or _db_pool is None:
+		raise RuntimeError("Database is not enabled.")
 	return _db_pool.get_connection()
 
 
@@ -58,8 +89,10 @@ def _hash(password: str) -> str:
 
 
 def _init_db():
+	if not DB_ENABLED:
+		return
 	conn = _db()
-	cur = conn.cursor() 
+	cur = conn.cursor()
 	cur.execute("""
 		CREATE TABLE IF NOT EXISTS users (
 			id INT AUTO_INCREMENT PRIMARY KEY,
@@ -96,12 +129,24 @@ def _init_db():
 	conn.close()
 
 
-_init_db()
+try:
+	_init_db()
+except Exception as e:
+	DB_ENABLED = False
+	print(f"Database initialization failed. Continuing in-memory mode. Reason: {e}")
 
 
 def _get_user_by_token(token: str):
 	if not token:
 		return None
+	if not DB_ENABLED:
+		user_id = MEM_TOKENS.get(token)
+		if not user_id:
+			return None
+		user = MEM_USERS.get(user_id)
+		if not user:
+			return None
+		return {"id": user_id, "name": user["name"], "email": user["email"]}
 	conn = _db()
 	cur = conn.cursor(dictionary=True)
 	cur.execute("SELECT id, name, email FROM users WHERE token = %s", (token,))
@@ -577,16 +622,42 @@ def _build_docx(title: str, content: str) -> bytes:
 	return buf.read()
 
 
-# ── Auth endpoints ─────────────────────────────────────────────────────────────────
+# ── Health route for Render ──────────────────────────────────────────────────
+@app.get("/")
+async def root():
+	return {
+		"message": "Aman.ai API is running",
+		"database": "enabled" if DB_ENABLED else "in-memory",
+		"model": OPENAI_MODEL,
+	}
+
+
+# ── Auth endpoints ───────────────────────────────────────────────────────────
 @app.post("/api/signup")
 async def signup(name: str = Form(...), email: str = Form(...), password: str = Form(...)):
+	global NEXT_USER_ID
+	email = email.strip().lower()
+	if not email or not password:
+		raise HTTPException(status_code=400, detail="Email and password are required.")
+
+	if not DB_ENABLED:
+		for u in MEM_USERS.values():
+			if u["email"] == email:
+				raise HTTPException(status_code=400, detail="Email already registered.")
+		user_id = NEXT_USER_ID
+		NEXT_USER_ID += 1
+		MEM_USERS[user_id] = {"name": name.strip(), "email": email, "password_hash": _hash(password)}
+		return JSONResponse({"message": "Account created. Please log in."})
+
 	conn = _db()
 	cur = conn.cursor()
 	try:
-		cur.execute("INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)",
-					(name.strip(), email.strip().lower(), _hash(password)))
+		cur.execute(
+			"INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)",
+			(name.strip(), email, _hash(password)),
+		)
 		conn.commit()
-	except mysql.connector.IntegrityError:
+	except Exception:
 		raise HTTPException(status_code=400, detail="Email already registered.")
 	finally:
 		cur.close()
@@ -596,10 +667,20 @@ async def signup(name: str = Form(...), email: str = Form(...), password: str = 
 
 @app.post("/api/login")
 async def login(email: str = Form(...), password: str = Form(...)):
+	email = email.strip().lower()
+	password_hash = _hash(password)
+
+	if not DB_ENABLED:
+		for user_id, u in MEM_USERS.items():
+			if u["email"] == email and u["password_hash"] == password_hash:
+				token = secrets.token_hex(32)
+				MEM_TOKENS[token] = user_id
+				return JSONResponse({"token": token, "name": u["name"], "email": u["email"]})
+		raise HTTPException(status_code=401, detail="Incorrect email or password.")
+
 	conn = _db()
 	cur = conn.cursor(dictionary=True)
-	cur.execute("SELECT id, name, email FROM users WHERE email = %s AND password_hash = %s",
-				(email.strip().lower(), _hash(password)))
+	cur.execute("SELECT id, name, email FROM users WHERE email = %s AND password_hash = %s", (email, password_hash))
 	user = cur.fetchone()
 	if not user:
 		cur.close()
@@ -616,24 +697,36 @@ async def login(email: str = Form(...), password: str = Form(...)):
 @app.post("/api/logout")
 async def logout(request: Request):
 	token = request.headers.get("Authorization", "").replace("Bearer ", "")
-	if token:
-		conn = _db()
-		cur = conn.cursor()
-		cur.execute("UPDATE users SET token = NULL WHERE token = %s", (token,))
-		conn.commit()
-		cur.close()
-		conn.close()
+	if not token:
+		return JSONResponse({"message": "Logged out."})
+	if not DB_ENABLED:
+		MEM_TOKENS.pop(token, None)
+		return JSONResponse({"message": "Logged out."})
+	conn = _db()
+	cur = conn.cursor()
+	cur.execute("UPDATE users SET token = NULL WHERE token = %s", (token,))
+	conn.commit()
+	cur.close()
+	conn.close()
 	return JSONResponse({"message": "Logged out."})
 
 
-# ── Chat history endpoints ────────────────────────────────────────────────────────
-# ── Chat session endpoints ────────────────────────────────────────────────────
+# ── Chat session endpoints ───────────────────────────────────────────────────
 @app.post("/api/chat/session")
 async def create_session(request: Request):
+	global NEXT_SESSION_ID
 	token = request.headers.get("Authorization", "").replace("Bearer ", "")
 	user = _get_user_by_token(token)
 	if not user:
 		raise HTTPException(status_code=401, detail="Not authenticated.")
+
+	if not DB_ENABLED:
+		session_id = NEXT_SESSION_ID
+		NEXT_SESSION_ID += 1
+		MEM_SESSIONS[session_id] = {"user_id": user["id"], "title": "New Chat"}
+		MEM_MESSAGES[session_id] = []
+		return JSONResponse({"session_id": session_id})
+
 	conn = _db()
 	cur = conn.cursor()
 	cur.execute("INSERT INTO chat_sessions (user_id, title) VALUES (%s, %s)", (user["id"], "New Chat"))
@@ -650,12 +743,15 @@ async def list_sessions(request: Request):
 	user = _get_user_by_token(token)
 	if not user:
 		return JSONResponse({"sessions": []})
+
+	if not DB_ENABLED:
+		sessions = [{"id": sid, "title": s["title"]} for sid, s in MEM_SESSIONS.items() if s["user_id"] == user["id"]]
+		sessions.sort(key=lambda x: x["id"], reverse=True)
+		return JSONResponse({"sessions": sessions[:30]})
+
 	conn = _db()
 	cur = conn.cursor(dictionary=True)
-	cur.execute(
-		"SELECT id, title, created_at FROM chat_sessions WHERE user_id = %s ORDER BY created_at DESC LIMIT 30",
-		(user["id"],)
-	)
+	cur.execute("SELECT id, title, created_at FROM chat_sessions WHERE user_id = %s ORDER BY created_at DESC LIMIT 30", (user["id"],))
 	sessions = cur.fetchall()
 	cur.close()
 	conn.close()
@@ -668,18 +764,23 @@ async def get_chat_history(request: Request, session_id: int = None):
 	user = _get_user_by_token(token)
 	if not user:
 		raise HTTPException(status_code=401, detail="Not authenticated.")
+
+	if not DB_ENABLED:
+		if session_id:
+			messages = MEM_MESSAGES.get(session_id, [])
+		else:
+			messages = []
+			for sid, s in MEM_SESSIONS.items():
+				if s["user_id"] == user["id"]:
+					messages.extend(MEM_MESSAGES.get(sid, []))
+		return JSONResponse({"messages": messages})
+
 	conn = _db()
 	cur = conn.cursor(dictionary=True)
 	if session_id:
-		cur.execute(
-			"SELECT role, content FROM chat_messages WHERE user_id = %s AND session_id = %s ORDER BY created_at ASC",
-			(user["id"], session_id)
-		)
+		cur.execute("SELECT role, content FROM chat_messages WHERE user_id = %s AND session_id = %s ORDER BY created_at ASC", (user["id"], session_id))
 	else:
-		cur.execute(
-			"SELECT role, content FROM chat_messages WHERE user_id = %s ORDER BY created_at ASC",
-			(user["id"],)
-		)
+		cur.execute("SELECT role, content FROM chat_messages WHERE user_id = %s ORDER BY created_at ASC", (user["id"],))
 	rows = cur.fetchall()
 	cur.close()
 	conn.close()
@@ -692,6 +793,14 @@ async def clear_chat_history(request: Request):
 	user = _get_user_by_token(token)
 	if not user:
 		raise HTTPException(status_code=401, detail="Not authenticated.")
+
+	if not DB_ENABLED:
+		for sid in list(MEM_SESSIONS.keys()):
+			if MEM_SESSIONS[sid]["user_id"] == user["id"]:
+				MEM_SESSIONS.pop(sid, None)
+				MEM_MESSAGES.pop(sid, None)
+		return JSONResponse({"message": "History cleared."})
+
 	conn = _db()
 	cur = conn.cursor()
 	cur.execute("DELETE FROM chat_messages WHERE user_id = %s", (user["id"],))
@@ -700,7 +809,6 @@ async def clear_chat_history(request: Request):
 	cur.close()
 	conn.close()
 	return JSONResponse({"message": "History cleared."})
-
 
 @app.post("/api/analyze")
 async def analyze_sdlc_file(
@@ -770,7 +878,6 @@ async def newchat(
 ):
 	token = request.headers.get("Authorization", "").replace("Bearer ", "")
 	user = _get_user_by_token(token)
-
 	content_type = request.headers.get("content-type", "")
 
 	if "application/json" in content_type:
@@ -778,31 +885,44 @@ async def newchat(
 		question = body.get("question", "").strip()
 		session_id = body.get("session_id")
 		history = body.get("history", [])
+
 		if not question:
 			raise HTTPException(status_code=400, detail="Question is empty.")
 
 		client = _get_client()
-		messages = [{"role": "system", "content": "You are Aman.ai, an AI-driven software security analyst assistant. Answer clearly and concisely."}]
+		messages = [{"role": "system", "content": "You are Aman.ai, an AI-driven software security analyst assistant. Answer clearly, concisely, and securely."}]
 		for m in history[-20:]:
-			messages.append({"role": m["role"], "content": m["content"]})
+			role = m.get("role")
+			content = m.get("content")
+			if role in ["user", "assistant"] and content:
+				messages.append({"role": role, "content": content})
+
+		# Critical fix: send the current user question to the model.
+		messages.append({"role": "user", "content": question})
 
 		response = client.chat.completions.create(model=OPENAI_MODEL, messages=messages)
 		answer = response.choices[0].message.content.strip()
 
 		if user and session_id:
-			conn = _db()
-			cur = conn.cursor()
-			cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "user", question))
-			cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "assistant", answer))
-			# Set session title from first user message (truncated)
-			cur.execute("UPDATE chat_sessions SET title = %s WHERE id = %s AND title = 'New Chat'", (question[:60], session_id))
-			conn.commit()
-			cur.close()
-			conn.close()
+			if not DB_ENABLED:
+				MEM_MESSAGES.setdefault(session_id, [])
+				MEM_MESSAGES[session_id].append({"role": "user", "content": question})
+				MEM_MESSAGES[session_id].append({"role": "assistant", "content": answer})
+				if session_id in MEM_SESSIONS and MEM_SESSIONS[session_id]["title"] == "New Chat":
+					MEM_SESSIONS[session_id]["title"] = question[:60]
+			else:
+				conn = _db()
+				cur = conn.cursor()
+				cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "user", question))
+				cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "assistant", answer))
+				cur.execute("UPDATE chat_sessions SET title = %s WHERE id = %s AND title = 'New Chat'", (question[:60], session_id))
+				conn.commit()
+				cur.close()
+				conn.close()
 
 		return JSONResponse({"answer": answer})
 
-	# Multipart — file upload
+	# Multipart file upload chat
 	if not files:
 		raise HTTPException(status_code=400, detail="No files uploaded.")
 
@@ -816,29 +936,35 @@ async def newchat(
 		raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
 	client = _get_client()
-	user_msg = f"{question or 'Please analyze this file for security issues.'}{combined_text}"
+	user_msg = f"{question or 'Please analyze this file for security issues.'}\n{combined_text}"
 	response = client.chat.completions.create(
 		model=OPENAI_MODEL,
 		messages=[
 			{"role": "system", "content": "You are Aman.ai, an AI-driven software security analyst assistant."},
-			{"role": "user",   "content": user_msg},
+			{"role": "user", "content": user_msg},
 		],
 	)
 	answer = response.choices[0].message.content.strip()
 
 	if user and session_id:
-		conn = _db()
-		cur = conn.cursor()
 		label = question or f"[File: {files[0].filename}]"
-		cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "user", label))
-		cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "assistant", answer))
-		cur.execute("UPDATE chat_sessions SET title = %s WHERE id = %s AND title = 'New Chat'", (label[:60], session_id))
-		conn.commit()
-		cur.close()
-		conn.close()
+		if not DB_ENABLED:
+			MEM_MESSAGES.setdefault(session_id, [])
+			MEM_MESSAGES[session_id].append({"role": "user", "content": label})
+			MEM_MESSAGES[session_id].append({"role": "assistant", "content": answer})
+			if session_id in MEM_SESSIONS and MEM_SESSIONS[session_id]["title"] == "New Chat":
+				MEM_SESSIONS[session_id]["title"] = label[:60]
+		else:
+			conn = _db()
+			cur = conn.cursor()
+			cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "user", label))
+			cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "assistant", answer))
+			cur.execute("UPDATE chat_sessions SET title = %s WHERE id = %s AND title = 'New Chat'", (label[:60], session_id))
+			conn.commit()
+			cur.close()
+			conn.close()
 
 	return JSONResponse({"answer": answer})
-
 
 class PhaseReport(BaseModel):
 	phase: str
