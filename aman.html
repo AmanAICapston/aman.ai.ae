@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Aman.ai</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-wrapper">
+
+    <div class="sidebar">
+      <div class="sidebar-title">Aman.ai</div>
+
+      <button class="sidebar-btn" onclick="window.location.href='newchat.html'">
+        <span class="icon">+</span> <span data-tkey="newChat">New Chat</span>
+      </button>
+      <button class="sidebar-btn" onclick="window.location.href='aman.html'">
+        <span class="icon">🏠</span> <span data-tkey="home">Home</span>
+      </button>
+
+      <div>
+        <div class="sidebar-section-title" data-tkey="general">General</div>
+        <button class="sidebar-btn" onclick="window.location.href='settings.html'">
+          <span class="icon">⚙</span> <span data-tkey="settings">Settings</span>
+        </button>
+        <button class="sidebar-btn" onclick="window.location.href='search.html'">
+          <span class="icon">🔍</span> <span data-tkey="search">Search</span>
+        </button>
+      </div>
+
+      <div id="sessionsList" style="display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1;margin-top:4px;">
+        <div class="sidebar-section-title" data-tkey="recentChats">Recent Chats</div>
+      </div>
+
+      <div id="sidebarAuth" style="margin-bottom:20px;padding:0 4px;"></div>
+    </div>
+
+    <div class="main">
+      <div class="top-text" id="hct">Higher Colleges of Technology</div>
+
+      <div class="logo-wrapper">
+        <img src="logo.png" class="logo-img" alt="Aman.ai logo">
+        <div class="logo-text-main">Aman.ai</div>
+        <div class="logo-text-sub" id="tagline">AI-Driven Software Security Analyst Assistant</div>
+      </div>
+
+      <div class="welcome-text">
+        <h1 id="welcomeTitle">Welcome to Aman.ai</h1>
+        <p id="welcomeDesc">Upload your SDLC phase documents to receive a professional security analysis report for each phase.</p>
+      </div>
+
+      <section class="sdlc-container" aria-label="SDLC phases">
+
+        <div class="sdlc-card" data-phase="Requirements">
+          <h3 class="sdlc-title">Phase 1 — Requirements</h3>
+          <p class="sdlc-hint">Upload: BRD, SRS, Functional Requirements, Business Flow Documents</p>
+          <input type="file" class="upload-input" multiple>
+          <div class="file-list"></div>
+          <div class="card-actions">
+            <button class="analyze-btn" onclick="analyzeFile(this)" data-tkey="analyze">Analyze</button>
+            <button class="download-btn" onclick="downloadReport(this)" disabled data-tkey="downloadReport">Download Report</button>
+          </div>
+          <div class="sdlc-result" aria-live="polite"></div>
+        </div>
+
+        <div class="sdlc-card" data-phase="Design">
+          <h3 class="sdlc-title">Phase 2 — Design</h3>
+          <p class="sdlc-hint">Upload: UML, Use Case Diagrams, DFD, Architecture Diagram, Database Design</p>
+          <input type="file" class="upload-input" multiple>
+          <div class="file-list"></div>
+          <div class="card-actions">
+            <button class="analyze-btn" onclick="analyzeFile(this)" data-tkey="analyze">Analyze</button>
+            <button class="download-btn" onclick="downloadReport(this)" disabled data-tkey="downloadReport">Download Report</button>
+          </div>
+          <div class="sdlc-result" aria-live="polite"></div>
+        </div>
+
+        <div class="sdlc-card" data-phase="Development">
+          <h3 class="sdlc-title">Phase 3 — Development</h3>
+          <p class="sdlc-hint">Upload: Source Code, API Design, Backend Logic, Database Schema, Config Files</p>
+          <input type="file" class="upload-input" multiple>
+          <div class="file-list"></div>
+          <div class="card-actions">
+            <button class="analyze-btn" onclick="analyzeFile(this)" data-tkey="analyze">Analyze</button>
+            <button class="download-btn" onclick="downloadReport(this)" disabled data-tkey="downloadReport">Download Report</button>
+          </div>
+          <div class="sdlc-result" aria-live="polite"></div>
+        </div>
+
+        <div class="sdlc-card" data-phase="Testing">
+          <h3 class="sdlc-title">Phase 4 — Testing</h3>
+          <p class="sdlc-hint">Upload: Test Cases, QA Reports, Security Testing Reports, Penetration Testing Results</p>
+          <input type="file" class="upload-input" multiple>
+          <div class="file-list"></div>
+          <div class="card-actions">
+            <button class="analyze-btn" onclick="analyzeFile(this)" data-tkey="analyze">Analyze</button>
+            <button class="download-btn" onclick="downloadReport(this)" disabled data-tkey="downloadReport">Download Report</button>
+          </div>
+          <div class="sdlc-result" aria-live="polite"></div>
+        </div>
+
+        <div class="sdlc-card" data-phase="Deployment">
+          <h3 class="sdlc-title">Phase 5 — Deployment</h3>
+          <p class="sdlc-hint">Upload: Deployment Config, Server Config, CI/CD Config, Cloud Settings, Security Policies</p>
+          <input type="file" class="upload-input" multiple>
+          <div class="file-list"></div>
+          <div class="card-actions">
+            <button class="analyze-btn" onclick="analyzeFile(this)" data-tkey="analyze">Analyze</button>
+            <button class="download-btn" onclick="downloadReport(this)" disabled data-tkey="downloadReport">Download Report</button>
+          </div>
+          <div class="sdlc-result" aria-live="polite"></div>
+        </div>
+
+        <div class="sdlc-card" data-phase="Maintenance">
+          <h3 class="sdlc-title">Phase 6 — Maintenance</h3>
+          <p class="sdlc-hint">Upload: Patch Reports, Vulnerability Reports, Monitoring Logs, Audit Reports, Incident Reports</p>
+          <input type="file" class="upload-input" multiple>
+          <div class="file-list"></div>
+          <div class="card-actions">
+            <button class="analyze-btn" onclick="analyzeFile(this)" data-tkey="analyze">Analyze</button>
+            <button class="download-btn" onclick="downloadReport(this)" disabled data-tkey="downloadReport">Download Report</button>
+          </div>
+          <div class="sdlc-result" aria-live="polite"></div>
+        </div>
+
+      </section>
+
+      <div class="final-report-section">
+        <button class="final-report-btn" id="finalReportBtn" onclick="generateFinalReport()" data-tkey="generateFinal">
+          Generate Final Comprehensive Security Report
+        </button>
+        <div class="final-report-result" id="finalReportResult" aria-live="polite"></div>
+        <button class="download-btn final-download-btn" id="finalDownloadBtn" onclick="downloadFinalReport()" style="display:none;" data-tkey="downloadFinal">
+          Download Final Report
+        </button>
+      </div>
+
+      <div class="chat-box">
+        <div class="chat-placeholder" id="chatPlaceholder" data-tkey="startChat">
+          Start a new conversation and ask Aman.ai about your software security, vulnerabilities, or best practices.
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-wrapper">
+          <input class="chat-input" id="chatInput" type="text" placeholder="Message Aman.ai..." />
+          <button class="chat-icon-btn send" id="chatSendBtn">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  <script>
+    applyTheme();
+    applyLang();
+    buildSidebar({ activePage: "home" });
+
+    // Translate page-specific elements
+    document.getElementById("hct").textContent = t("hct");
+    document.getElementById("tagline").textContent = t("tagline");
+    document.getElementById("welcomeTitle").textContent = t("welcomeTitle");
+    document.getElementById("welcomeDesc").textContent = t("welcomeDesc");
+    document.getElementById("chatPlaceholder").textContent = t("startChat");
+    document.getElementById("chatInput").placeholder = t("msgPlaceholder");
+
+    const phaseResults = {};
+
+    document.querySelectorAll(".upload-input").forEach(input => {
+      input.addEventListener("change", () => {
+        const fileList = input.nextElementSibling;
+        fileList.innerHTML = "";
+        Array.from(input.files).forEach(f => {
+          const tag = document.createElement("span");
+          tag.className = "file-tag";
+          tag.textContent = f.name;
+          fileList.appendChild(tag);
+        });
+      });
+    });
+
+    async function analyzeFile(button) {
+      const card = button.closest(".sdlc-card");
+      const phase = card.getAttribute("data-phase");
+      const fileInput = card.querySelector(".upload-input");
+      const resultBox = card.querySelector(".sdlc-result");
+      const downloadBtn = card.querySelector(".download-btn");
+      const files = Array.from(fileInput.files);
+      if (files.length === 0) { alert("Please choose at least one file for the " + phase + " phase."); return; }
+      const formData = new FormData();
+      formData.append("phase", phase);
+      files.forEach(f => formData.append("files", f));
+      button.disabled = true;
+      downloadBtn.disabled = true;
+      resultBox.textContent = t("analyzing") + " " + files.length + " file(s)...";
+      card.classList.remove("expanded");
+      try {
+        const response = await fetch("http://localhost:8000/api/analyze", { method: "POST", body: formData });
+        if (!response.ok) { const e = await response.json(); throw new Error(e.detail || "Analysis failed."); }
+        const data = await response.json();
+        resultBox.textContent = data.analysis || "No response received.";
+        phaseResults[phase] = data.analysis;
+        card.classList.add("expanded");
+        downloadBtn.disabled = false;
+      } catch (error) {
+        resultBox.textContent = "Error: " + error.message;
+        card.classList.add("expanded");
+      } finally { button.disabled = false; }
+    }
+
+    async function downloadReport(button) {
+      const card = button.closest(".sdlc-card");
+      const phase = card.getAttribute("data-phase");
+      const content = phaseResults[phase];
+      if (!content) return;
+      const formData = new FormData();
+      formData.append("phase", phase);
+      formData.append("content", content);
+      button.disabled = true; button.textContent = t("downloading");
+      try {
+        const response = await fetch("http://localhost:8000/api/download-report", { method: "POST", body: formData });
+        if (!response.ok) throw new Error("Download failed.");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = `Aman_ai_${phase}_Report.docx`; a.click();
+        URL.revokeObjectURL(url);
+      } catch (error) { alert("Download error: " + error.message); }
+      finally { button.disabled = false; button.textContent = t("downloadReport"); }
+    }
+
+    async function generateFinalReport() {
+      const btn = document.getElementById("finalReportBtn");
+      const resultBox = document.getElementById("finalReportResult");
+      const downloadBtn = document.getElementById("finalDownloadBtn");
+      const phases = Object.entries(phaseResults).map(([phase, analysis]) => ({ phase, analysis }));
+      if (phases.length === 0) { alert("Please analyze at least one SDLC phase first."); return; }
+      btn.disabled = true; btn.textContent = t("generating");
+      resultBox.textContent = t("generating");
+      downloadBtn.style.display = "none";
+      try {
+        const response = await fetch("http://localhost:8000/api/final-report", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(phases)
+        });
+        if (!response.ok) { const e = await response.json(); throw new Error(e.detail || "Failed."); }
+        const data = await response.json();
+        resultBox.textContent = data.analysis || "No response received.";
+        phaseResults["Final"] = data.analysis;
+        downloadBtn.style.display = "inline-block";
+      } catch (error) { resultBox.textContent = "Error: " + error.message; }
+      finally { btn.disabled = false; btn.textContent = t("generateFinal"); }
+    }
+
+    async function downloadFinalReport() {
+      const content = phaseResults["Final"];
+      if (!content) return;
+      const btn = document.getElementById("finalDownloadBtn");
+      btn.disabled = true; btn.textContent = t("downloading");
+      const formData = new FormData();
+      formData.append("phase", "Final"); formData.append("content", content);
+      try {
+        const response = await fetch("http://localhost:8000/api/download-report", { method: "POST", body: formData });
+        if (!response.ok) throw new Error("Download failed.");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = "Aman_ai_Final_Comprehensive_Security_Report.docx"; a.click();
+        URL.revokeObjectURL(url);
+      } catch (error) { alert("Download error: " + error.message); }
+      finally { btn.disabled = false; btn.textContent = t("downloadFinal"); }
+    }
+
+    function appendChatMessage(text, type) {
+      const container = document.getElementById("chatMessages");
+      const placeholder = document.getElementById("chatPlaceholder");
+      const chatBox = document.querySelector(".chat-box");
+      const message = document.createElement("div");
+      message.className = "chat-message " + type;
+      message.textContent = text;
+      container.appendChild(message);
+      placeholder.style.display = "none";
+      if (type === "assistant") chatBox.classList.add("has-response");
+      container.scrollTop = container.scrollHeight;
+    }
+
+    async function sendChat() {
+      const input = document.getElementById("chatInput");
+      const sendBtn = document.getElementById("chatSendBtn");
+      const question = input.value.trim();
+      if (!question) return;
+      const phaseResponses = Object.entries(phaseResults).filter(([p]) => p !== "Final").map(([phase, response]) => ({ phase, response }));
+      if (phaseResponses.length === 0) { alert("Please analyze at least one SDLC phase before chatting."); return; }
+      appendChatMessage(question, "user");
+      input.value = ""; sendBtn.disabled = true;
+      try {
+        const response = await fetch("http://localhost:8000/api/chat", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, phases: phaseResponses })
+        });
+        if (!response.ok) { const e = await response.json(); throw new Error(e.detail || "Chat failed."); }
+        const data = await response.json();
+        appendChatMessage(data.answer || "No response received.", "assistant");
+      } catch (error) { appendChatMessage("Error: " + error.message, "assistant"); }
+      finally { sendBtn.disabled = false; }
+    }
+
+    document.getElementById("chatSendBtn").addEventListener("click", sendChat);
+    document.getElementById("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendChat(); } });
+  </script>
+</body>
+</html>
