@@ -63,6 +63,11 @@ body {
   background: #1a213d;
 }
 
+.active-session {
+  background: #2d3a6b !important;
+  border-color: #3b82f6 !important;
+}
+
 .sidebar-btn span.icon {
   width: 20px;
   height: 20px;
@@ -413,6 +418,53 @@ body {
 
 .chat-box.has-response {
   height: 600px;
+}
+
+/* Light theme */
+body.theme-light {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+body.theme-light .app-wrapper { background: #f1f5f9; }
+body.theme-light .main {
+  background: linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%);
+  color: #1e293b;
+}
+body.theme-light .sidebar { background: #1e293b; }
+body.theme-light .chat-box,
+body.theme-light .sdlc-card,
+body.theme-light .final-report-result {
+  background: rgba(255,255,255,0.85);
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+body.theme-light .chat-input,
+body.theme-light .sdlc-prompt {
+  background: #ffffff;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+body.theme-light .sdlc-result {
+  background: #f8fafc;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+body.theme-light .sdlc-title,
+body.theme-light .page-title,
+body.theme-light .logo-text-main,
+body.theme-light .welcome-text h1 { color: #1e293b; }
+body.theme-light .top-text,
+body.theme-light .logo-text-sub,
+body.theme-light .welcome-text p,
+body.theme-light .page-desc { color: #475569; }
+body.theme-light .chat-message.assistant {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+body.theme-light .chat-message.user {
+  background: rgba(59,130,246,0.1);
+  color: #1e293b;
 }
 
 .sdlc-hint {

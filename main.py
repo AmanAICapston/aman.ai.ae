@@ -1,15 +1,20 @@
+import hashlib
 import io
 import os
+import re
+import secrets
+from datetime import date
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+import mysql.connector
+from mysql.connector import pooling
+
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from openai import OpenAI
-import re
-from datetime import date
 
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
@@ -31,6 +36,79 @@ app.add_middleware(
 )
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+
+# ── MySQL connection pool ─────────────────────────────────────────────────────
+_db_pool = pooling.MySQLConnectionPool(
+	pool_name="amanpool",
+	pool_size=5,
+	host=os.getenv("DB_HOST", "localhost"),
+	port=int(os.getenv("DB_PORT", "3306")),
+	user=os.getenv("DB_USER", "root"),
+	password=os.getenv("DB_PASSWORD", ""),
+	database=os.getenv("DB_NAME", "amanai"),
+)
+
+
+def _db():
+	return _db_pool.get_connection()
+
+
+def _hash(password: str) -> str:
+	return hashlib.sha256(password.encode()).hexdigest()
+
+
+def _init_db():
+	conn = _db()
+	cur = conn.cursor() 
+	cur.execute("""
+		CREATE TABLE IF NOT EXISTS users (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			name VARCHAR(100) NOT NULL,
+			email VARCHAR(150) NOT NULL UNIQUE,
+			password_hash VARCHAR(64) NOT NULL,
+			token VARCHAR(64),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	""")
+	cur.execute("""
+		CREATE TABLE IF NOT EXISTS chat_sessions (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			user_id INT NOT NULL,
+			title VARCHAR(200) DEFAULT 'New Chat',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		)
+	""")
+	cur.execute("""
+		CREATE TABLE IF NOT EXISTS chat_messages (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			user_id INT NOT NULL,
+			session_id INT,
+			role VARCHAR(20) NOT NULL,
+			content TEXT NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id),
+			FOREIGN KEY (session_id) REFERENCES chat_sessions(id)
+		)
+	""")
+	conn.commit()
+	cur.close()
+	conn.close()
+
+
+_init_db()
+
+
+def _get_user_by_token(token: str):
+	if not token:
+		return None
+	conn = _db()
+	cur = conn.cursor(dictionary=True)
+	cur.execute("SELECT id, name, email FROM users WHERE token = %s", (token,))
+	user = cur.fetchone()
+	cur.close()
+	conn.close()
+	return user
 
 PHASE_INSTRUCTIONS = {
 	"Requirements": (
@@ -499,6 +577,131 @@ def _build_docx(title: str, content: str) -> bytes:
 	return buf.read()
 
 
+# ── Auth endpoints ─────────────────────────────────────────────────────────────────
+@app.post("/api/signup")
+async def signup(name: str = Form(...), email: str = Form(...), password: str = Form(...)):
+	conn = _db()
+	cur = conn.cursor()
+	try:
+		cur.execute("INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)",
+					(name.strip(), email.strip().lower(), _hash(password)))
+		conn.commit()
+	except mysql.connector.IntegrityError:
+		raise HTTPException(status_code=400, detail="Email already registered.")
+	finally:
+		cur.close()
+		conn.close()
+	return JSONResponse({"message": "Account created. Please log in."})
+
+
+@app.post("/api/login")
+async def login(email: str = Form(...), password: str = Form(...)):
+	conn = _db()
+	cur = conn.cursor(dictionary=True)
+	cur.execute("SELECT id, name, email FROM users WHERE email = %s AND password_hash = %s",
+				(email.strip().lower(), _hash(password)))
+	user = cur.fetchone()
+	if not user:
+		cur.close()
+		conn.close()
+		raise HTTPException(status_code=401, detail="Incorrect email or password.")
+	token = secrets.token_hex(32)
+	cur.execute("UPDATE users SET token = %s WHERE id = %s", (token, user["id"]))
+	conn.commit()
+	cur.close()
+	conn.close()
+	return JSONResponse({"token": token, "name": user["name"], "email": user["email"]})
+
+
+@app.post("/api/logout")
+async def logout(request: Request):
+	token = request.headers.get("Authorization", "").replace("Bearer ", "")
+	if token:
+		conn = _db()
+		cur = conn.cursor()
+		cur.execute("UPDATE users SET token = NULL WHERE token = %s", (token,))
+		conn.commit()
+		cur.close()
+		conn.close()
+	return JSONResponse({"message": "Logged out."})
+
+
+# ── Chat history endpoints ────────────────────────────────────────────────────────
+# ── Chat session endpoints ────────────────────────────────────────────────────
+@app.post("/api/chat/session")
+async def create_session(request: Request):
+	token = request.headers.get("Authorization", "").replace("Bearer ", "")
+	user = _get_user_by_token(token)
+	if not user:
+		raise HTTPException(status_code=401, detail="Not authenticated.")
+	conn = _db()
+	cur = conn.cursor()
+	cur.execute("INSERT INTO chat_sessions (user_id, title) VALUES (%s, %s)", (user["id"], "New Chat"))
+	conn.commit()
+	session_id = cur.lastrowid
+	cur.close()
+	conn.close()
+	return JSONResponse({"session_id": session_id})
+
+
+@app.get("/api/chat/sessions")
+async def list_sessions(request: Request):
+	token = request.headers.get("Authorization", "").replace("Bearer ", "")
+	user = _get_user_by_token(token)
+	if not user:
+		return JSONResponse({"sessions": []})
+	conn = _db()
+	cur = conn.cursor(dictionary=True)
+	cur.execute(
+		"SELECT id, title, created_at FROM chat_sessions WHERE user_id = %s ORDER BY created_at DESC LIMIT 30",
+		(user["id"],)
+	)
+	sessions = cur.fetchall()
+	cur.close()
+	conn.close()
+	return JSONResponse({"sessions": [{"id": s["id"], "title": s["title"]} for s in sessions]})
+
+
+@app.get("/api/chat/history")
+async def get_chat_history(request: Request, session_id: int = None):
+	token = request.headers.get("Authorization", "").replace("Bearer ", "")
+	user = _get_user_by_token(token)
+	if not user:
+		raise HTTPException(status_code=401, detail="Not authenticated.")
+	conn = _db()
+	cur = conn.cursor(dictionary=True)
+	if session_id:
+		cur.execute(
+			"SELECT role, content FROM chat_messages WHERE user_id = %s AND session_id = %s ORDER BY created_at ASC",
+			(user["id"], session_id)
+		)
+	else:
+		cur.execute(
+			"SELECT role, content FROM chat_messages WHERE user_id = %s ORDER BY created_at ASC",
+			(user["id"],)
+		)
+	rows = cur.fetchall()
+	cur.close()
+	conn.close()
+	return JSONResponse({"messages": [{"role": r["role"], "content": r["content"]} for r in rows]})
+
+
+@app.delete("/api/chat/history")
+async def clear_chat_history(request: Request):
+	token = request.headers.get("Authorization", "").replace("Bearer ", "")
+	user = _get_user_by_token(token)
+	if not user:
+		raise HTTPException(status_code=401, detail="Not authenticated.")
+	conn = _db()
+	cur = conn.cursor()
+	cur.execute("DELETE FROM chat_messages WHERE user_id = %s", (user["id"],))
+	cur.execute("DELETE FROM chat_sessions WHERE user_id = %s", (user["id"],))
+	conn.commit()
+	cur.close()
+	conn.close()
+	return JSONResponse({"message": "History cleared."})
+
+
 @app.post("/api/analyze")
 async def analyze_sdlc_file(
 	phase: str = Form(...),
@@ -546,6 +749,95 @@ async def analyze_sdlc_file(
 		raise HTTPException(status_code=500, detail="No response received from model.")
 
 	return JSONResponse({"phase": phase, "analysis": output_text.strip()})
+
+
+class ChatMessage(BaseModel):
+	role: str
+	content: str
+
+
+class NewChatRequest(BaseModel):
+	question: str
+	history: list[ChatMessage] = []
+
+
+@app.post("/api/newchat")
+async def newchat(
+	request: Request,
+	question: str = Form(None),
+	session_id: int = Form(None),
+	files: list[UploadFile] = File(None),
+):
+	token = request.headers.get("Authorization", "").replace("Bearer ", "")
+	user = _get_user_by_token(token)
+
+	content_type = request.headers.get("content-type", "")
+
+	if "application/json" in content_type:
+		body = await request.json()
+		question = body.get("question", "").strip()
+		session_id = body.get("session_id")
+		history = body.get("history", [])
+		if not question:
+			raise HTTPException(status_code=400, detail="Question is empty.")
+
+		client = _get_client()
+		messages = [{"role": "system", "content": "You are Aman.ai, an AI-driven software security analyst assistant. Answer clearly and concisely."}]
+		for m in history[-20:]:
+			messages.append({"role": m["role"], "content": m["content"]})
+
+		response = client.chat.completions.create(model=OPENAI_MODEL, messages=messages)
+		answer = response.choices[0].message.content.strip()
+
+		if user and session_id:
+			conn = _db()
+			cur = conn.cursor()
+			cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "user", question))
+			cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "assistant", answer))
+			# Set session title from first user message (truncated)
+			cur.execute("UPDATE chat_sessions SET title = %s WHERE id = %s AND title = 'New Chat'", (question[:60], session_id))
+			conn.commit()
+			cur.close()
+			conn.close()
+
+		return JSONResponse({"answer": answer})
+
+	# Multipart — file upload
+	if not files:
+		raise HTTPException(status_code=400, detail="No files uploaded.")
+
+	combined_text = ""
+	for f in files:
+		raw = await f.read()
+		if raw:
+			combined_text += f"\n\n--- File: {f.filename} ---\n{_extract_text(raw, f.filename, f.content_type)}"
+
+	if not combined_text.strip():
+		raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+	client = _get_client()
+	user_msg = f"{question or 'Please analyze this file for security issues.'}{combined_text}"
+	response = client.chat.completions.create(
+		model=OPENAI_MODEL,
+		messages=[
+			{"role": "system", "content": "You are Aman.ai, an AI-driven software security analyst assistant."},
+			{"role": "user",   "content": user_msg},
+		],
+	)
+	answer = response.choices[0].message.content.strip()
+
+	if user and session_id:
+		conn = _db()
+		cur = conn.cursor()
+		label = question or f"[File: {files[0].filename}]"
+		cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "user", label))
+		cur.execute("INSERT INTO chat_messages (user_id, session_id, role, content) VALUES (%s,%s,%s,%s)", (user["id"], session_id, "assistant", answer))
+		cur.execute("UPDATE chat_sessions SET title = %s WHERE id = %s AND title = 'New Chat'", (label[:60], session_id))
+		conn.commit()
+		cur.close()
+		conn.close()
+
+	return JSONResponse({"answer": answer})
 
 
 class PhaseReport(BaseModel):
