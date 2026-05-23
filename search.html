@@ -4,59 +4,109 @@
   <meta charset="UTF-8">
   <title>Aman.ai – Search</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    .result-card { background:rgba(30,41,88,0.4); border:1px solid #28304e; border-radius:10px; padding:12px 16px; margin-bottom:12px; }
+    .result-card .result-q { font-size:13px; font-weight:600; color:#93c5fd; margin-bottom:6px; }
+    .result-card .result-a { font-size:12px; color:#c3c8ff; white-space:pre-wrap; max-height:120px; overflow-y:auto; }
+    .no-results { font-size:13px; color:#6b7280; margin-top:16px; }
+    mark { background:rgba(59,130,246,0.35); color:#e5e7ff; border-radius:3px; padding:0 2px; }
+  </style>
 </head>
 <body>
   <div class="app-wrapper">
     <div class="sidebar">
       <div class="sidebar-title">Aman.ai</div>
-
       <button class="sidebar-btn" onclick="window.location.href='newchat.html'">
-        <span class="icon">+</span>
-        New Chat
+        <span class="icon">+</span> <span data-tkey="newChat">New Chat</span>
       </button>
-
+      <button class="sidebar-btn" onclick="window.location.href='aman.html'">
+        <span class="icon">🏠</span> <span data-tkey="home">Home</span>
+      </button>
       <div>
-        <div class="sidebar-section-title">General</div>
+        <div class="sidebar-section-title" data-tkey="general">General</div>
         <button class="sidebar-btn" onclick="window.location.href='settings.html'">
-          <span class="icon">⚙</span>
-          Settings
+          <span class="icon">⚙</span> <span data-tkey="settings">Settings</span>
         </button>
         <button class="sidebar-btn" onclick="window.location.href='search.html'">
-          <span class="icon">🔍</span>
-          Search
+          <span class="icon">🔍</span> <span data-tkey="search">Search</span>
         </button>
       </div>
+      <div id="sessionsList" style="display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1;margin-top:4px;">
+        <div class="sidebar-section-title" data-tkey="recentChats">Recent Chats</div>
+      </div>
+      <div id="sidebarAuth" style="margin-bottom:20px;padding:0 4px;"></div>
     </div>
 
-    <div class="main">
-      <div class="page-title">Search</div>
-      <div class="page-desc">
-        Search through your previous conversations or security topics. 
+    <div class="main" style="padding:32px 48px;">
+      <div class="page-title" id="searchTitle">Search</div>
+      <div class="page-desc" id="searchDesc">Search through your previous Aman.ai conversations.</div>
+
+      <div class="form-group" style="display:flex;gap:10px;align-items:flex-end;">
+        <div style="flex:1;">
+          <label id="searchLabel">Search query</label>
+          <input type="text" id="searchInput" placeholder="Search conversations..." onkeydown="if(event.key==='Enter') runSearch()">
+        </div>
+        <button class="primary-btn" id="searchBtn" style="margin-top:0;height:42px;" onclick="runSearch()">Search</button>
       </div>
 
-      <div class="form-group">
-        <label>Search query</label>
-        <input type="text" id="searchInput" placeholder="Search in Aman.ai...">
-      </div>
-
-      <button class="primary-btn" onclick="runSearch()">Search</button>
-
-      <div id="results" style="margin-top: 20px; font-size: 14px; color: #e8e9f4;"></div>
-
-      <button class="link-btn" onclick="window.location.href='aman.html'">
-        ← Back to Home
-      </button>
+      <div id="results"></div>
+      <button class="link-btn" id="backBtn" onclick="window.location.href='aman.html'" style="margin-top:16px;">← Back to Home</button>
     </div>
   </div>
 
+  <script src="sidebar.js"></script>
   <script>
-    function runSearch() {
-      const q = document.getElementById('searchInput').value;
-      const results = document.getElementById('results');
-      if (!q.trim()) {
-        results.textContent = "Please enter a search query.";
-      } else {
-        results.textContent = "Search results for: \"" + q + "\" .";
+    applyTheme();
+    applyLang();
+    buildSidebar({ activePage: "search" });
+
+    document.getElementById("searchTitle").textContent       = t("searchTitle");
+    document.getElementById("searchDesc").textContent        = t("searchDesc");
+    document.getElementById("searchLabel").textContent       = t("searchLabel");
+    document.getElementById("searchInput").placeholder       = t("searchPlaceholder");
+    document.getElementById("searchBtn").textContent         = t("searchBtn");
+    document.getElementById("backBtn").textContent           = t("backHome");
+
+    function highlight(text, query) {
+      if (!query) return text;
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return text.replace(new RegExp(`(${escaped})`, "gi"), "<mark>$1</mark>");
+    }
+
+    async function runSearch() {
+      const q = document.getElementById("searchInput").value.trim().toLowerCase();
+      const resultsEl = document.getElementById("results");
+      const token = localStorage.getItem("amanToken");
+
+      if (!q) { resultsEl.innerHTML = `<div class='no-results'>${LANG==="ar"?"أدخل نص البحث.":"Please enter a search query."}</div>`; return; }
+      if (!token) { resultsEl.innerHTML = `<div class='no-results'>${LANG==="ar"?"يرجى تسجيل الدخول للبحث.":"Please log in to search your chat history."}</div>`; return; }
+
+      try {
+        const res = await fetch("http://localhost:8000/api/chat/history", { headers: { Authorization: "Bearer " + token } });
+        if (!res.ok) throw new Error("Failed to load history.");
+        const data = await res.json();
+        const messages = data.messages;
+        if (messages.length === 0) { resultsEl.innerHTML = `<div class='no-results'>${LANG==="ar"?"لا توجد محادثات.":"No chat history found."}</div>`; return; }
+
+        const pairs = [];
+        for (let i = 0; i < messages.length - 1; i++) {
+          if (messages[i].role === "user" && messages[i+1].role === "assistant") {
+            pairs.push({ q: messages[i].content, a: messages[i+1].content });
+            i++;
+          }
+        }
+
+        const matches = pairs.filter(p => p.q.toLowerCase().includes(q) || p.a.toLowerCase().includes(q));
+        if (matches.length === 0) { resultsEl.innerHTML = `<div class='no-results'>${LANG==="ar"?"لا نتائج لـ":"No results for"} "<strong>${q}</strong>".</div>`; return; }
+
+        resultsEl.innerHTML = matches.reverse().map(p => `
+          <div class="result-card">
+            <div class="result-q">Q: ${highlight(p.q, q)}</div>
+            <div class="result-a">${highlight(p.a, q)}</div>
+          </div>
+        `).join("");
+      } catch (err) {
+        resultsEl.innerHTML = `<div class='no-results'>Error: ${err.message}</div>`;
       }
     }
   </script>

@@ -9,55 +9,106 @@
   <div class="app-wrapper">
     <div class="sidebar">
       <div class="sidebar-title">Aman.ai</div>
-
       <button class="sidebar-btn" onclick="window.location.href='newchat.html'">
-        <span class="icon">+</span>
-        New Chat
+        <span class="icon">+</span> <span data-tkey="newChat">New Chat</span>
       </button>
-
+      <button class="sidebar-btn" onclick="window.location.href='aman.html'">
+        <span class="icon">🏠</span> <span data-tkey="home">Home</span>
+      </button>
       <div>
-        <div class="sidebar-section-title">General</div>
+        <div class="sidebar-section-title" data-tkey="general">General</div>
         <button class="sidebar-btn" onclick="window.location.href='settings.html'">
-          <span class="icon">⚙</span>
-          Settings
+          <span class="icon">⚙</span> <span data-tkey="settings">Settings</span>
         </button>
         <button class="sidebar-btn" onclick="window.location.href='search.html'">
-          <span class="icon">🔍</span>
-          Search
+          <span class="icon">🔍</span> <span data-tkey="search">Search</span>
         </button>
       </div>
+      <div id="sessionsList" style="display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1;margin-top:4px;">
+        <div class="sidebar-section-title" data-tkey="recentChats">Recent Chats</div>
+      </div>
+      <div id="sidebarAuth" style="margin-bottom:20px;padding:0 4px;"></div>
     </div>
 
-    <div class="main">
-      <div class="page-title">Settings</div>
-      <div class="page-desc">
-        
-      </div>
+    <div class="main" style="padding:32px 48px;">
+      <div class="page-title" id="settingsTitle">Settings</div>
+      <div class="page-desc" id="settingsDesc">Manage your preferences for Aman.ai.</div>
 
       <div class="form-group">
-        <label>Theme</label>
-        <select>
-          <option>Dark (Default)</option>
-          <option>Light</option>
+        <label id="themeLabel">Theme</label>
+        <select id="themeSelect">
+          <option value="dark" id="optDark">Dark (Default)</option>
+          <option value="light" id="optLight">Light</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label>Language</label>
-        <select>
-          <option>English</option>
-          <option>Arabic</option>
+        <label id="langLabel">Language</label>
+        <select id="langSelect">
+          <option value="en" id="optEn">English</option>
+          <option value="ar" id="optAr">Arabic</option>
         </select>
       </div>
 
-      <button class="primary-btn" onclick="alert('Settings saved.')">
-        Save Settings
-      </button>
+      <div class="form-group">
+        <label id="clearLabel">Clear Chat History</label>
+        <button class="primary-btn" id="clearBtn" style="background:#ef4444;margin-top:0;" onclick="clearHistory()">Clear All History</button>
+      </div>
 
-      <button class="link-btn" onclick="window.location.href='aman.html'">
-        ← Back to Home
-      </button>
+      <button class="primary-btn" id="saveBtn" onclick="saveSettings()">Save Settings</button>
+      <button class="link-btn" id="backBtn" onclick="window.location.href='aman.html'">← Back to Home</button>
+
+      <div id="savedMsg" style="display:none;margin-top:12px;color:#4ade80;font-size:13px;"></div>
     </div>
   </div>
+
+  <script src="sidebar.js"></script>
+  <script>
+    applyTheme();
+    applyLang();
+    buildSidebar({ activePage: "settings" });
+
+    // Translate page text
+    document.getElementById("settingsTitle").textContent = t("settingsTitle");
+    document.getElementById("settingsDesc").textContent  = t("settingsDesc");
+    document.getElementById("themeLabel").textContent    = t("theme");
+    document.getElementById("langLabel").textContent     = t("language");
+    document.getElementById("optDark").textContent       = t("dark");
+    document.getElementById("optLight").textContent      = t("light");
+    document.getElementById("optEn").textContent         = t("english");
+    document.getElementById("optAr").textContent         = t("arabic");
+    document.getElementById("clearLabel").textContent    = t("clearHistory");
+    document.getElementById("clearBtn").textContent      = t("clearBtn");
+    document.getElementById("saveBtn").textContent       = t("saveSettings");
+    document.getElementById("backBtn").textContent       = t("backHome");
+
+    // Load saved values
+    document.getElementById("themeSelect").value = localStorage.getItem("amanTheme") || "dark";
+    document.getElementById("langSelect").value  = localStorage.getItem("amanLang")  || "en";
+
+    function saveSettings() {
+      const theme = document.getElementById("themeSelect").value;
+      const lang  = document.getElementById("langSelect").value;
+      localStorage.setItem("amanTheme", theme);
+      localStorage.setItem("amanLang",  lang);
+      // Reload so all translations and direction apply fresh
+      window.location.reload();
+    }
+
+    function clearHistory() {
+      if (!confirm(t("clearHistory") + "?")) return;
+      const token = localStorage.getItem("amanToken");
+      if (!token) { alert(LANG === "ar" ? "يجب تسجيل الدخول أولاً." : "You must be logged in."); return; }
+      fetch("http://localhost:8000/api/chat/history", {
+        method: "DELETE", headers: { Authorization: "Bearer " + token }
+      }).then(res => res.json()).then(() => {
+        const msg = document.getElementById("savedMsg");
+        msg.textContent = LANG === "ar" ? "✓ تم مسح السجل بنجاح." : "✓ History cleared.";
+        msg.style.display = "block";
+        setTimeout(() => msg.style.display = "none", 3000);
+        loadSidebarSessions("sessionsList", null);
+      });
+    }
+  </script>
 </body>
 </html>

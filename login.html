@@ -5,73 +5,111 @@
   <title>Aman.ai – Login</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    body {
-      background: #050814;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    .login-box {
-      width: 350px;
-      padding: 30px;
-      background: #0b1020;
-      border-radius: 16px;
-      border: 1px solid #1b2238;
-      box-shadow: 0 0 20px rgba(0,0,0,0.4);
-      text-align: center;
-    }
-    .login-box h2 {
-      margin-bottom: 20px;
-      color: #3b82f6;
-    }
-    .login-box input {
-      width: 100%;
-      padding: 12px;
-      margin: 10px 0;
-      border-radius: 10px;
-      border: 1px solid #252b45;
-      background: #050814;
-      color: white;
-      font-size: 14px;
-    }
-    .login-box button {
-      width: 100%;
-      padding: 12px;
-      margin-top: 10px;
-      border-radius: 10px;
-      border: none;
-      background: #3b82f6;
-      color: white;
-      font-size: 16px;
-      cursor: pointer;
-    }
+    body { background:#050814; display:flex; justify-content:center; align-items:center; height:100vh; }
+    .login-box { width:380px; padding:36px; background:#0b1020; border-radius:16px; border:1px solid #1b2238; box-shadow:0 0 30px rgba(0,0,0,0.5); }
+    .login-box h2 { text-align:center; margin-bottom:4px; color:#3b82f6; font-size:22px; }
+    .login-box .sub { text-align:center; font-size:13px; color:#8b92b8; margin-bottom:24px; }
+    .tabs { display:flex; gap:0; margin-bottom:24px; border-radius:10px; overflow:hidden; border:1px solid #252b45; }
+    .tab-btn { flex:1; padding:10px; background:#0b1020; color:#8b92b8; border:none; cursor:pointer; font-size:14px; transition:0.2s; }
+    .tab-btn.active { background:#3b82f6; color:#fff; font-weight:600; }
+    .form-section { display:none; }
+    .form-section.active { display:block; }
+    input { width:100%; padding:12px; margin:8px 0; border-radius:10px; border:1px solid #252b45; background:#050814; color:white; font-size:14px; outline:none; box-sizing:border-box; }
+    input:focus { border-color:#3b82f6; }
+    .btn-primary { width:100%; padding:12px; margin-top:12px; border-radius:10px; border:none; background:#3b82f6; color:white; font-size:15px; cursor:pointer; font-weight:600; }
+    .btn-primary:hover { background:#2563eb; }
+    .msg { font-size:13px; margin-top:10px; text-align:center; display:none; }
+    .msg.error { color:#f87171; }
+    .msg.success { color:#4ade80; }
   </style>
 </head>
 <body>
-
   <div class="login-box">
-    <h2>Aman.ai Login</h2>
+    <h2>Aman.ai</h2>
+    <p class="sub">AI-Driven Software Security Analyst</p>
 
-    <input type="email" id="email" placeholder="Enter your email">
-    <input type="password" id="password" placeholder="Enter your password">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('login')">Login</button>
+      <button class="tab-btn" onclick="switchTab('signup')">Sign Up</button>
+    </div>
 
-    <button onclick="login()">Login</button>
+    <!-- Login -->
+    <div class="form-section active" id="loginSection">
+      <input type="email" id="loginEmail" placeholder="Email address" onkeydown="if(event.key==='Enter') doLogin()">
+      <input type="password" id="loginPassword" placeholder="Password" onkeydown="if(event.key==='Enter') doLogin()">
+      <button class="btn-primary" onclick="doLogin()">Login</button>
+      <div class="msg error" id="loginError"></div>
+    </div>
+
+    <!-- Signup -->
+    <div class="form-section" id="signupSection">
+      <input type="text" id="signupName" placeholder="Full name" onkeydown="if(event.key==='Enter') doSignup()">
+      <input type="email" id="signupEmail" placeholder="Email address" onkeydown="if(event.key==='Enter') doSignup()">
+      <input type="password" id="signupPassword" placeholder="Password" onkeydown="if(event.key==='Enter') doSignup()">
+      <button class="btn-primary" onclick="doSignup()">Create Account</button>
+      <div class="msg error" id="signupError"></div>
+      <div class="msg success" id="signupSuccess"></div>
+    </div>
   </div>
 
   <script>
-    function login() {
-      const email = document.getElementById("email").value;
-      const pass = document.getElementById("password").value;
+    if (localStorage.getItem("amanToken")) window.location.href = "aman.html";
 
-    
-      if (email === "admin@aman.ai" && pass === "1234") {
+    function switchTab(tab) {
+      document.getElementById("loginSection").classList.toggle("active", tab === "login");
+      document.getElementById("signupSection").classList.toggle("active", tab === "signup");
+      document.querySelectorAll(".tab-btn").forEach((b, i) => b.classList.toggle("active", (i === 0) === (tab === "login")));
+    }
+
+    function showMsg(id, text) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.style.display = "block";
+      setTimeout(() => el.style.display = "none", 4000);
+    }
+
+    async function doLogin() {
+      const email = document.getElementById("loginEmail").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      if (!email || !password) { showMsg("loginError", "Please fill in all fields."); return; }
+
+      const fd = new FormData();
+      fd.append("email", email);
+      fd.append("password", password);
+
+      try {
+        const res = await fetch("http://localhost:8000/api/login", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) { showMsg("loginError", data.detail || "Login failed."); return; }
+        localStorage.setItem("amanToken", data.token);
+        localStorage.setItem("amanUser", JSON.stringify({ name: data.name, email: data.email }));
         window.location.href = "aman.html";
-      } else {
-        alert("Incorrect email or password (Demo only).");
+      } catch {
+        showMsg("loginError", "Server error. Is the backend running?");
+      }
+    }
+
+    async function doSignup() {
+      const name = document.getElementById("signupName").value.trim();
+      const email = document.getElementById("signupEmail").value.trim();
+      const password = document.getElementById("signupPassword").value;
+      if (!name || !email || !password) { showMsg("signupError", "Please fill in all fields."); return; }
+
+      const fd = new FormData();
+      fd.append("name", name);
+      fd.append("email", email);
+      fd.append("password", password);
+
+      try {
+        const res = await fetch("http://localhost:8000/api/signup", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) { showMsg("signupError", data.detail || "Signup failed."); return; }
+        showMsg("signupSuccess", "Account created! You can now log in.");
+        setTimeout(() => switchTab("login"), 1500);
+      } catch {
+        showMsg("signupError", "Server error. Is the backend running?");
       }
     }
   </script>
-
 </body>
 </html>
