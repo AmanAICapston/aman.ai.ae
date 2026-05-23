@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Aman.ai – New Chat</title>
+  <title>Aman.ai – Chat</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -10,53 +10,191 @@
     <div class="sidebar">
       <div class="sidebar-title">Aman.ai</div>
 
-      <button class="sidebar-btn" onclick="window.location.href='newchat.html'">
-        <span class="icon">+</span>
-        New Chat
+      <button class="sidebar-btn" onclick="startNewChat()">
+        <span class="icon">+</span> <span data-tkey="newChat">New Chat</span>
+      </button>
+      <button class="sidebar-btn" onclick="window.location.href='aman.html'">
+        <span class="icon">🏠</span> <span data-tkey="home">Home</span>
       </button>
 
       <div>
-        <div class="sidebar-section-title">General</div>
+        <div class="sidebar-section-title" data-tkey="general">General</div>
         <button class="sidebar-btn" onclick="window.location.href='settings.html'">
-          <span class="icon">⚙</span>
-          Settings
+          <span class="icon">⚙</span> <span data-tkey="settings">Settings</span>
         </button>
         <button class="sidebar-btn" onclick="window.location.href='search.html'">
-          <span class="icon">🔍</span>
-          Search
+          <span class="icon">🔍</span> <span data-tkey="search">Search</span>
         </button>
       </div>
+
+      <div id="sessionsList" style="display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1;margin-top:4px;">
+        <div class="sidebar-section-title" data-tkey="recentChats">Recent Chats</div>
+      </div>
+
+      <div id="sidebarAuth" style="margin-bottom:20px;padding:0 4px;"></div>
     </div>
 
     <div class="main">
-      <div class="page-title">New Conversation</div>
-      <div class="page-desc">
-        Start a fresh discussion with Aman.ai about your software security, vulnerabilities, or best practices.
-      </div>
+      <div class="page-title" id="convTitle">Conversation</div>
+      <div class="page-desc" id="convDesc">Ask Aman.ai anything about software security.</div>
 
-      <div class="chat-box">
-        <div class="chat-placeholder">
-          This is a new chat. Type your first question to Aman.ai.
-        </div>
-
+      <div class="chat-box has-response">
+        <div class="chat-messages" id="chatMessages"></div>
+        <div id="attachedFileBar" style="display:none;padding:4px 8px;font-size:11px;color:#93c5fd;background:rgba(59,130,246,0.1);border-radius:6px;margin-top:4px;cursor:pointer;"></div>
         <div class="chat-input-wrapper">
-          <button class="chat-icon-btn" onclick="openAttachmentMenu()">📎</button>
-          <button class="chat-icon-btn">🎤</button>
-          <input class="chat-input" type="text" placeholder="Message Aman.ai..." />
-          <button class="chat-icon-btn send">➤</button>
+          <input type="file" id="fileAttachment" style="display:none" onchange="handleFileAttach()">
+          <button class="chat-icon-btn" onclick="document.getElementById('fileAttachment').click()" title="Attach file">📎</button>
+          <input class="chat-input" id="chatInput" type="text" placeholder="Message Aman.ai..." />
+          <button class="chat-icon-btn send" id="sendBtn">➤</button>
         </div>
       </div>
-
-      <button class="link-btn" onclick="window.location.href='aman.html'">
-        ← Back to Home
-      </button>
     </div>
   </div>
 
+  <script src="sidebar.js"></script>
   <script>
-    function openAttachmentMenu() {
-      alert("Attachment options ");
+    applyTheme();
+    applyLang();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlSession = urlParams.get("session");
+
+    buildSidebar({ activeSessionId: urlSession ? parseInt(urlSession) : null });
+
+    // Translate page text
+    document.getElementById("convTitle").textContent    = t("conversation");
+    document.getElementById("convDesc").textContent     = t("convDesc");
+    document.getElementById("chatInput").placeholder    = t("msgPlaceholder");
+
+    let currentSessionId = null;
+    const chatHistory    = [];
+    let attachedFile     = null;
+
+    async function init() {
+      if (urlSession) {
+        await loadSession(parseInt(urlSession));
+      } else if (TOKEN) {
+        await startNewChat();
+      } else {
+        appendMessage(t("helloMsg"), "assistant");
+      }
     }
+
+    async function startNewChat() {
+      if (!TOKEN) {
+        appendMessage(t("helloMsg"), "assistant");
+        return;
+      }
+      try {
+        const res  = await fetch("http://localhost:8000/api/chat/session", {
+          method: "POST", headers: { Authorization: "Bearer " + TOKEN }
+        });
+        const data = await res.json();
+        currentSessionId = data.session_id;
+        chatHistory.length = 0;
+        document.getElementById("chatMessages").innerHTML = "";
+        appendMessage(t("helloMsg"), "assistant");
+        window.history.replaceState({}, "", `newchat.html?session=${currentSessionId}`);
+        loadSidebarSessions("sessionsList", currentSessionId);
+      } catch {
+        appendMessage("Error creating session.", "assistant");
+      }
+    }
+
+    async function loadSession(sessionId) {
+      currentSessionId = sessionId;
+      chatHistory.length = 0;
+      document.getElementById("chatMessages").innerHTML = "";
+      window.history.replaceState({}, "", `newchat.html?session=${sessionId}`);
+      try {
+        const res  = await fetch(`http://localhost:8000/api/chat/history?session_id=${sessionId}`, {
+          headers: { Authorization: "Bearer " + TOKEN }
+        });
+        const data = await res.json();
+        if (data.messages.length === 0) {
+          appendMessage(t("helloMsg"), "assistant");
+        } else {
+          data.messages.forEach(m => { appendMessage(m.content, m.role); chatHistory.push(m); });
+        }
+      } catch {}
+      loadSidebarSessions("sessionsList", currentSessionId);
+    }
+
+    function appendMessage(text, type) {
+      const container = document.getElementById("chatMessages");
+      const div = document.createElement("div");
+      div.className = "chat-message " + type;
+      div.textContent = text;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function handleFileAttach() {
+      const file = document.getElementById("fileAttachment").files[0];
+      if (!file) return;
+      attachedFile = file;
+      const bar = document.getElementById("attachedFileBar");
+      bar.style.display = "block";
+      bar.textContent = `📎 ${file.name} — click to remove`;
+      bar.onclick = () => {
+        attachedFile = null;
+        bar.style.display = "none";
+        document.getElementById("fileAttachment").value = "";
+      };
+    }
+
+    async function sendMessage() {
+      const input    = document.getElementById("chatInput");
+      const sendBtn  = document.getElementById("sendBtn");
+      const question = input.value.trim();
+      if (!question && !attachedFile) return;
+
+      const displayText = question || `[File: ${attachedFile.name}]`;
+      appendMessage(displayText, "user");
+      input.value = "";
+      sendBtn.disabled = true;
+
+      const authHeaders = TOKEN ? { Authorization: "Bearer " + TOKEN } : {};
+
+      try {
+        let answer;
+        if (attachedFile) {
+          const fd = new FormData();
+          fd.append("files", attachedFile);
+          if (question) fd.append("question", question);
+          if (currentSessionId) fd.append("session_id", currentSessionId);
+          const res = await fetch("http://localhost:8000/api/newchat", { method: "POST", headers: authHeaders, body: fd });
+          if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Failed"); }
+          answer = (await res.json()).answer;
+          attachedFile = null;
+          document.getElementById("attachedFileBar").style.display = "none";
+          document.getElementById("fileAttachment").value = "";
+        } else {
+          chatHistory.push({ role: "user", content: question });
+          const res = await fetch("http://localhost:8000/api/newchat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify({ question, history: chatHistory, session_id: currentSessionId })
+          });
+          if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Failed"); }
+          answer = (await res.json()).answer;
+          chatHistory.push({ role: "assistant", content: answer });
+        }
+        appendMessage(answer, "assistant");
+        loadSidebarSessions("sessionsList", currentSessionId);
+      } catch (err) {
+        appendMessage("Error: " + err.message, "assistant");
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    document.getElementById("sendBtn").addEventListener("click", sendMessage);
+    document.getElementById("chatInput").addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); sendMessage(); }
+    });
+
+    init();
   </script>
 </body>
 </html>
