@@ -966,6 +966,45 @@ async def newchat(
 
 	return JSONResponse({"answer": answer})
 
+
+class ChatWithPhasesRequest(BaseModel):
+	question: str
+	phases: list[dict] = []
+
+
+@app.post("/api/chat")
+async def chat_with_phase_context(payload: ChatWithPhasesRequest):
+	if not payload.question.strip():
+		raise HTTPException(status_code=400, detail="Question is empty.")
+
+	context_lines = []
+	for item in payload.phases:
+		phase = item.get("phase", "Unknown")
+		response = item.get("response") or item.get("analysis") or ""
+		if response:
+			context_lines.append(f"{phase} Phase Result:\n{response}")
+
+	context = "\n\n".join(context_lines)
+	user_prompt = payload.question
+	if context:
+		user_prompt = f"{payload.question}\n\nUse this SDLC analysis context:\n{context}"
+
+	client = _get_client()
+	response = client.chat.completions.create(
+		model=OPENAI_MODEL,
+		messages=[
+			{
+				"role": "system",
+				"content": "You are Aman.ai, an AI-driven software security analyst assistant. Answer clearly, concisely, and securely.",
+			},
+			{"role": "user", "content": user_prompt},
+		],
+	)
+
+	answer = response.choices[0].message.content.strip()
+	return JSONResponse({"answer": answer})
+
+
 class PhaseReport(BaseModel):
 	phase: str
 	analysis: str
